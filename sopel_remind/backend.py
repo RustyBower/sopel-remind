@@ -377,7 +377,10 @@ def setup(bot: Sopel):
     if os.path.isfile(builtin_filename):
         migrated = _migrate_builtin_reminders(builtin_filename, reminders)
         if migrated:
-            LOGGER.info('Migrated %d reminder(s) from built-in plugin.', migrated)
+            LOGGER.info(
+                'Migrated %d reminder(s) from built-in plugin.',
+                migrated,
+            )
             save_reminders(reminders, filename)
         backup_name = builtin_filename + '.bk'
         os.rename(builtin_filename, backup_name)

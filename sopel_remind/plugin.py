@@ -1,7 +1,6 @@
 """Reminder plugin for Sopel."""
 from __future__ import annotations
 
-import io
 import os
 import threading
 from datetime import datetime
