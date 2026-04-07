@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import csv
+import io
 import os
 import re
 from datetime import datetime, timedelta
@@ -342,10 +343,47 @@ def get_reminder_filename(settings: Config) -> str:
     )
 
 
+def _migrate_builtin_reminders(
+    from_file: str,
+    reminders: List[Reminder],
+) -> int:
+    """Migrate reminders from the built-in remind plugin into a list.
+
+    :param from_file: path to the old tab-delimited reminders file
+    :param reminders: list to append migrated reminders to
+    :return: number of reminders migrated
+    """
+    count = 0
+    with io.open(from_file, 'r', encoding='utf-8') as database:
+        for line in database:
+            unixtime, channel, nick, message = line.split('\t', 3)
+            message = message.rstrip('\n')
+            timestamp = int(float(unixtime))
+            reminders.append(Reminder(timestamp, channel, nick, message))
+            count += 1
+    return count
+
+
 def setup(bot: Sopel):
     """Setup action for the plugin."""
     filename = get_reminder_filename(bot.settings)
-    bot.memory[MEMORY_KEY] = load_reminders(filename)
+    reminders = load_reminders(filename)
+
+    # Auto-migrate from built-in remind plugin if old file exists
+    builtin_filename = os.path.join(
+        bot.settings.core.homedir,
+        bot.settings.basename + '.reminders.db',
+    )
+    if os.path.isfile(builtin_filename):
+        migrated = _migrate_builtin_reminders(builtin_filename, reminders)
+        if migrated:
+            LOGGER.info('Migrated %d reminder(s) from built-in plugin.', migrated)
+            save_reminders(reminders, filename)
+        backup_name = builtin_filename + '.bk'
+        os.rename(builtin_filename, backup_name)
+        LOGGER.info('Old reminders file renamed to "%s".', backup_name)
+
+    bot.memory[MEMORY_KEY] = reminders
 
 
 def shutdown(bot: Sopel):

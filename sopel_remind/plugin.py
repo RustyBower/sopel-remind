@@ -68,21 +68,10 @@ def configure(settings: Config) -> None:
 
 def migrate_builtin(from_file: str, to_file: str) -> int:
     """Migrate reminders from the built-in remind plugin."""
-    return_value: int = 0
     reminders = backend.load_reminders(to_file)
-
-    with io.open(from_file, 'r', encoding='utf-8') as database:
-        for i, line in enumerate(database, start=1):
-            unixtime, channel, nick, message = line.split('\t', 3)
-            message = message.rstrip('\n')
-            timestamp = int(float(unixtime))  # ignore microseconds
-            reminders.append(
-                backend.Reminder(timestamp, channel, nick, message)
-            )
-            return_value = i
-
+    count = backend._migrate_builtin_reminders(from_file, reminders)
     backend.save_reminders(reminders, to_file)
-    return return_value
+    return count
 
 
 @plugin.interval(2)

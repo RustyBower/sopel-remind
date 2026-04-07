@@ -117,6 +117,74 @@ def test_setup_existing_reminders(mockbot):
     assert mockbot.memory[backend.MEMORY_KEY] == reminders
 
 
+def test_migrate_builtin_reminders(tmp_path):
+    old_file = tmp_path / 'test.reminders.db'
+    old_file.write_text(
+        '1776388089\t#channel\tTestUser\tremind someone about stuff\n'
+        '1857096126\t#channel\tOtherUser\tcheck on things\n',
+        encoding='utf-8',
+    )
+
+    reminders = []
+    count = backend._migrate_builtin_reminders(str(old_file), reminders)
+
+    assert count == 2
+    assert len(reminders) == 2
+    assert reminders[0] == backend.Reminder(
+        1776388089, '#channel', 'TestUser', 'remind someone about stuff')
+    assert reminders[1] == backend.Reminder(
+        1857096126, '#channel', 'OtherUser', 'check on things')
+
+
+def test_setup_auto_migrates_builtin(mockbot):
+    mockbot.settings.define_section('remind', config.RemindSection)
+
+    # Create old-format reminders file in homedir
+    old_file = os.path.join(
+        mockbot.settings.core.homedir, 'test.reminders.db')
+    with open(old_file, 'w', encoding='utf-8') as f:
+        f.write('1776388089\t#channel\tTestUser\tremind someone\n')
+        f.write('1857096126\t#channel\tOtherUser\tcheck things\n')
+
+    backend.setup(mockbot)
+
+    # Reminders should be loaded into memory
+    assert len(mockbot.memory[backend.MEMORY_KEY]) == 2
+    assert mockbot.memory[backend.MEMORY_KEY][0].nick == 'TestUser'
+    assert mockbot.memory[backend.MEMORY_KEY][1].nick == 'OtherUser'
+
+    # Old file should be renamed to .bk
+    assert not os.path.exists(old_file)
+    assert os.path.exists(old_file + '.bk')
+
+    # CSV file should also be written
+    filename = backend.get_reminder_filename(mockbot.settings)
+    saved = backend.load_reminders(filename)
+    assert len(saved) == 2
+
+
+def test_setup_auto_migrates_merges_existing(mockbot):
+    mockbot.settings.define_section('remind', config.RemindSection)
+
+    # Pre-existing CSV reminder
+    filename = backend.get_reminder_filename(mockbot.settings)
+    existing = [backend.Reminder(1700000000, '#channel', 'Existing', 'hello')]
+    backend.save_reminders(existing, filename)
+
+    # Old-format reminders file
+    old_file = os.path.join(
+        mockbot.settings.core.homedir, 'test.reminders.db')
+    with open(old_file, 'w', encoding='utf-8') as f:
+        f.write('1776388089\t#channel\tTestUser\tremind someone\n')
+
+    backend.setup(mockbot)
+
+    # Should have both existing + migrated
+    assert len(mockbot.memory[backend.MEMORY_KEY]) == 2
+    assert mockbot.memory[backend.MEMORY_KEY][0].nick == 'Existing'
+    assert mockbot.memory[backend.MEMORY_KEY][1].nick == 'TestUser'
+
+
 def test_shutdown(mockbot):
     mockbot.settings.define_section('remind', config.RemindSection)
     filename = backend.get_reminder_filename(mockbot.settings)
